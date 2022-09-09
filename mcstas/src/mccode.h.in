@@ -173,6 +173,8 @@ void exp_fprint(FILE *f, CExp e); /* Output an expression to file. */
 int exp_isvalue(CExp e);  /* Ask if expression is a value. */
 void exp_setlineno(CExp e, int n); /* Set line number of expression */
 int exp_getlineno(CExp e);  /* Get line number of expression, or zero */
+int exp_issimpleassignment(CExp e); /*[id]\s*=\s*{value} | [id]\s*=\s[id]{+-/*}{value} */
+int exp_newvalue(CExp e, int old_value);
 
 
 /*******************************************************************************

@@ -143,6 +143,8 @@ REMOVABLE     return TOK_REMOVABLE;     /* extended McStas grammar with include 
 CPU           return TOK_CPUONLY;       /* extended McStas grammar with GPU-CPU support */
 NOACC         return TOK_NOACC; 
 DEPENDENCY    return TOK_DEPENDENCY;
+FOR           return TOK_FOR;
+ASSEMBLY      return TOK_ASSEMBLY;
 
 "("|")"|"["|"]"|"{"|"}"|"," return yytext[0]; /* Punctuation. */
 "="|"*"       return yytext[0]; /* Operator. */
@@ -163,6 +165,8 @@ DEPENDENCY    return TOK_DEPENDENCY;
       return TOK_CTOK;
 \
     }
+
+";" return TOK_STATEMENT_END;
 
   /* Scanning embedded C code. */
 

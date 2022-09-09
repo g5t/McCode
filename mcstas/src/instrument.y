@@ -23,8 +23,12 @@
 %{
 int yylex();
 int yyerror(char *s);
+struct List_header;
+struct Symbol_table;
 int list_cat(struct List_header *, struct List_header *);
-int symtab_cat(struct List_header *, struct List_header *);
+int symtab_cat(struct Symbol_table *, struct Symbol_table *);
+// prevent gcc from complaining that strcasestr doesn't exist when it does
+char * strcasestr(const char *haystack, const char *needle);
 %}
 
 %{
@@ -42,7 +46,9 @@ int symtab_cat(struct List_header *, struct List_header *);
 
 /* Need a pure parser to allow for recursive calls when autoloading component
    definitions. */
-%pure-parser
+//%pure-parser
+%define api.pure full
+//%define parse.error detailed
 
 /*******************************************************************************
 * Type definition for semantic values.
@@ -111,6 +117,8 @@ int symtab_cat(struct List_header *, struct List_header *);
 %token TOK_CPUONLY    "CPU"   /* extended McStas grammar with GPU-CPU support */
 %token TOK_NOACC      "NOACC"
 %token TOK_DEPENDENCY "DEPENDENCY"
+%token TOK_FOR        "FOR"
+%token TOK_ASSEMBLY   "ASSEMBLY"
 
 /*******************************************************************************
 * Declarations of terminals and nonterminals.
@@ -124,6 +132,7 @@ int symtab_cat(struct List_header *, struct List_header *);
 %token TOK_CODE_END
 %token <string> TOK_CODE_LINE
 %token TOK_INVALID
+%token <string> TOK_STATEMENT_END
 
 %type <instance> component compref reference instref
 %type <groupinst> groupdef groupref
@@ -132,7 +141,7 @@ int symtab_cat(struct List_header *, struct List_header *);
 %type <exp>     exp topexp topatexp genexp genatexp when split
 %type <actuals> actuallist actuals actuals1
 %type <comp_iformals> comp_iformallist comp_iformals comp_iformals1
-%type <cformal> comp_iformal
+%type <cformal> comp_iformal loop_assign
 %type <formals> def_par set_par out_par
 %type <iformals> instrpar_list instr_formals instr_formals1
 %type <iformal> instr_formal
@@ -853,6 +862,7 @@ complist:   /* empty */
         if (!comp_instances_list) comp_instances_list = list_create();
         if (!group_instances)     group_instances     = symtab_create();
         if (!group_instances_list)group_instances_list= list_create();
+        // GST initialize the loop status list
       }
     | complist component
       {
@@ -921,7 +931,125 @@ complist:   /* empty */
     {
       /* included instrument */
     }
+    | complist looplist
+    {
+     /* Initialize the looplist */
+    }
 ;
+
+looplist: looplist loop
+    {
+     /* Start for loop */
+    }
+    | loop
+    {
+    }
+;
+
+loop : for_loop_0
+    {
+    }
+    | for_loop_n
+    {
+    }
+;
+for_loop_0: TOK_FOR '(' loop_assign ')' TOK_ASSEMBLY
+    {
+    printf("Inner-most loop simple");
+    }
+    | TOK_FOR '(' loop_assign TOK_STATEMENT_END loop_compare TOK_STATEMENT_END exp ')' TOK_ASSEMBLY
+    {
+    printf("\n%s ", exp_tostring($7));
+    printf("Inner-most loop");
+    }
+;
+
+for_loop_n: TOK_FOR '(' loop_assign ')'
+    {
+    printf("Outer loop simple - ");
+    }
+    | TOK_FOR '(' loop_assign TOK_STATEMENT_END loop_compare TOK_STATEMENT_END exp ')'
+    {
+    printf("\n%s ", exp_tostring($7));
+    printf("Outer loop! - ");
+    }
+;
+
+loop_assign : TOK_ID '=' exp
+    {
+    /*
+    // abuse the component argument specification struct
+    struct comp_iformal *formal;
+    palloc(formal);
+    formal->id = $1;
+    formal->isoptional = -1;
+    formal->default_value = $3;
+    formal->type = instr_type_int;
+    $$ = formal;
+    */
+    }
+    | TOK_ID TOK_ID '=' exp
+    {
+ /*
+    struct comp_iformal *formal;
+    palloc(formal);
+    if (!strcmp($1, "int")) formal->type = instr_type_int;
+    else if (!strcmp($1, "double")) formal->type = instr_type_double;
+    else {
+      print_error("ERROR Illegal type %s for loop expression "
+      //"at line %s:%d.\n" $1, instr_current_filename, instr_current_line);
+      "\n", $1);
+      formal->type = instr_type_int;
+    }
+    formal->id= $2;
+    formal->isoptional = -1;
+    formal->default_value = $4;
+    $$ = formal;
+*/
+    }
+;
+
+loop_compare : TOK_ID TOK_CTOK TOK_ID
+    {
+    }
+    | TOK_ID TOK_CTOK TOK_NUMBER
+    {
+    }
+    | TOK_NUMBER TOK_CTOK TOK_ID
+    {
+    }
+;
+
+/*
+loop_iterate : "--" TOK_ID
+    {
+    }
+    | "++" TOK_ID
+    {
+    }
+    | TOK_ID "--"
+    {
+    }
+    | TOK_ID "++"
+    {
+    }
+    | TOK_ID '=' exp
+    {
+    }
+    | TOK_ID "+=" exp
+    {
+    }
+    | TOK_ID "-=" exp
+    {
+    }
+    | TOK_ID "*=" exp
+    {
+    }
+;
+*/
+
+
+
 
 instname: "COPY" '(' TOK_ID ')'
       {
@@ -1015,7 +1143,7 @@ cpuonly:    /* empty */
     | "CPU"
       {
         $$ = 1;
-	strncat(instrument_definition->dependency, " -DFUNNEL ", 1024);
+	strncat(instrument_definition->dependency, " -DFUNNEL ", 12);
       }
 ;
 
@@ -1064,7 +1192,7 @@ component: removable cpuonly split "COMPONENT" instname '=' instref
           comp->group->last_comp      =comp->name;
           comp->group->last_comp_index=comp->index;
           if (comp->split)
-            print_warn("WARNING: Component %s=%s() at line %s:%d is in GROUP %s and has a SPLIT.\n"
+            print_warn(NULL, "WARNING: Component %s=%s() at line %s:%d is in GROUP %s and has a SPLIT.\n"
               "\tMove the SPLIT keyword before (outside) the component instance %s (first in GROUP)\n",
               comp->name, comp->def->name, instr_current_filename, instr_current_line, $12->name,
               comp->group->first_comp);
@@ -1346,8 +1474,8 @@ dependency:
     }
   | "DEPENDENCY" TOK_STRING
     {
-      strncat(instrument_definition->dependency, " ", 1024);
-      strncat(instrument_definition->dependency, $2, 1024);
+      strncat(instrument_definition->dependency, " ", 3);
+      strncat(instrument_definition->dependency, $2, 1023); /* buffer length is 1024 -- so can only copy 1023 */
     }
 
 noacc:
@@ -1708,7 +1836,7 @@ parse_command_line(int argc, char *argv[])
   instrument_definition->include_runtime = 1;
   instrument_definition->enable_trace    = 0;
   instrument_definition->portable        = 0;
-  strcmp(instrument_definition->dependency, "-lm");
+  strcat(instrument_definition->dependency, "-lm");
   executable_name                        = argv[0];
   for(i = 1; i < argc; i++)
   {
