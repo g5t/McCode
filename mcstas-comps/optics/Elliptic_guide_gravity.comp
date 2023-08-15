@@ -1268,7 +1268,7 @@ INITIALIZE
 		guideInfo.enableSegments = 1;
 
 		if (nSegments == -1) {
-		  printf("\nError: vector-specifcation of coating used, but nSegments=%i.\n  Please give provide nSegments = length of coating segment-arrays!\n", nSegments);
+		  printf("\nError: vector-specifcation of coating used, but nSegments=-1.\n  Please give provide nSegments = length of coating segment-arrays!\n");
 		  exit(-1);
 		} else {
 		  guideInfo.numberOfSegments = (int)nSegments;
